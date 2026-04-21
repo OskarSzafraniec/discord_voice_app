@@ -1,6 +1,6 @@
 # Wirtualny Asystent Discord (Voice Bot)
 
-Projekt na zaliczenie polegający na stworzeniu bota do Discorda, który odpowiada i reaguje na mowę użytkowników na kanałach głosowych. 
+Projekt polegający na stworzeniu bota do Discorda, który odpowiada i reaguje na mowę użytkowników na kanałach głosowych. 
 
 Bot wykorzystuje zoptymalizowane kosztowo technologie do działania:
 * **STT** (przekształcanie mowy na tekst) – przetwarzanie lokalne przy użyciu biblioteki `SpeechRecognition`.
