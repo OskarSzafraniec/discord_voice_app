@@ -1,5 +1,15 @@
-venv/
+# Zależności Node.js
+node_modules/
+
+# Plik ze zmiennymi środowiskowymi (zabezpieczenie tokena)
 .env
-__pycache__/
+
+# Nagrania i pliki tymczasowe
+*.pcm
 *.wav
 *.mp3
+
+# (Opcjonalnie) logi z błędami Node.js, jeśli by się pojawiły
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
