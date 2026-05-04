@@ -5,6 +5,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const prism = require('prism-media'); 
+const { convertAudioToTextLocal } = require('./SpeechToText');
 
 const client = new Client({
     intents: [
@@ -89,12 +90,24 @@ client.on(Events.MessageCreate, async message => {
                             wavFilename
                         ]);
 
-                        ffmpegProcess.on('close', (code) => {
+                        ffmpegProcess.on('close', async (code) => {
                             if (code === 0) {
                                 message.channel.send(`✅ Utworzono nagranie: **${wavFilename}**`);
+                                
+                                // Bezpieczne usuwanie pliku .pcm
                                 if (fs.existsSync(pcmFilename)) {
                                     fs.unlinkSync(pcmFilename); 
                                 }
+
+                                // --- TUTAJ WCHODZI NOWY KOD TRANSKRYPCJI ---
+                                const text = await convertAudioToTextLocal(wavFilename);
+                                if (text) {
+                                    message.channel.send(`📝 **Ty:** ${text}`);
+                                } else {
+                                    message.channel.send(`🤷 Nie zrozumiałem, co powiedziałeś.`);
+                                }
+                                // -------------------------------------------
+                                
                             } else {
                                 console.error('⚠️ Błąd konwersji ffmpeg.');
                             }
