@@ -9,6 +9,7 @@ const { convertAudioToTextLocal } = require('./SpeechToText');
 const { generateAiResponse } = require('./LLMService');
 const { convertTextToAudioLocal } = require('./TextToSpeech');
 const { createAudioResource, createAudioPlayer, AudioPlayerStatus } = require('@discordjs/voice');
+const path = require('path');
 
 const client = new Client({
     intents: [
@@ -62,8 +63,16 @@ client.on(Events.MessageCreate, async message => {
                     });
 
                     const timestamp = Date.now();
-                    const pcmFilename = `nagranie_${userId}_${timestamp}.pcm`;
-                    const wavFilename = `nagranie_${userId}_${timestamp}.wav`;
+
+                    // 1. Sprawdzamy, czy folder temp_audio istnieje (jeśli nie, tworzymy go)
+                    const tempDir = path.join(__dirname, 'temp_audio');
+                    if (!fs.existsSync(tempDir)) {
+                        fs.mkdirSync(tempDir);
+                    }
+
+                    // 2. Dodajemy ścieżkę do folderu przed nazwą pliku
+                    const pcmFilename = path.join(tempDir, `nagranie_${userId}_${timestamp}.pcm`);
+                    const wavFilename = path.join(tempDir, `nagranie_${userId}_${timestamp}.wav`);
                     
                     const decoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
                     const fileStream = fs.createWriteStream(pcmFilename);
@@ -104,21 +113,25 @@ client.on(Events.MessageCreate, async message => {
 
                         ffmpegProcess.on('close', async (code) => {
                             if (code === 0) {
-                                message.channel.send(`✅ Utworzono nagranie: **${wavFilename}**`);
+                                // Zamiast spamu na Discordzie, mamy czysty log w terminalu pod bazę
+                                console.log(`[BAZA DANYCH - PREP] Wygenerowano plik: ${wavFilename}`);
                                 
                                 // Bezpieczne usuwanie pliku .pcm
                                 if (fs.existsSync(pcmFilename)) {
                                     fs.unlinkSync(pcmFilename); 
                                 }
 
-
                                 const text = await convertAudioToTextLocal(wavFilename);
                                 if (text) {
-                                    // message.channel.send(`📝 **Ty:** ${text}`);
+                                    
+                                    // Dyskretna, samo-usuwająca się wiadomość na czacie
+                                    message.channel.send(`⚙️ *Przetwarzam zapytanie głosowe i odpowiadam na kanale audio...*`)
+                                        .then(msg => {
+                                            setTimeout(() => msg.delete().catch(console.error), 10000);
+                                        });
                                     
                                     // --- KOD LLM ---
                                     const aiReply = await generateAiResponse(text);
-                                    // message.channel.send(`🤖 **Asystent:** ${aiReply}`);
                                     
                                     // --- BRAKUJĄCY KOD TTS (ODTWARZANIE GŁOSU) ---
                                     const audioFilePath = await convertTextToAudioLocal(aiReply);
@@ -128,16 +141,15 @@ client.on(Events.MessageCreate, async message => {
                                         const resource = createAudioResource(audioFilePath);
                                         
                                         player.play(resource);
-                                        connection.subscribe(player); // Wpuszczamy bota na kanał głosowy, żeby to powiedział
+                                        connection.subscribe(player);
 
-                                        // Sprzątamy: Usuwamy plik z dysku, gdy bot skończy mówić
+                                        // Sprzątamy: Usuwamy plik z dysku
                                         player.on(AudioPlayerStatus.Idle, () => {
                                             if (fs.existsSync(audioFilePath)) {
                                                 fs.unlinkSync(audioFilePath);
                                             }
                                         });
                                     }
-                                    // --------------------------------
                                     
                                 } else {
                                     console.log(`🤷 Nie zrozumiałem, co powiedziałeś (lub serwer padł).`);
@@ -159,7 +171,6 @@ client.on(Events.MessageCreate, async message => {
                                     }
                                 }
 
-                                
                             } else {
                                 console.error('⚠️ Błąd konwersji ffmpeg.');
                             }

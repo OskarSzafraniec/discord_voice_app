@@ -6,22 +6,37 @@ async function convertTextToAudioLocal(textResponse) {
     try {
         console.log(`🔊 Generuję głos z tekstu: "${textResponse.substring(0, 30)}..."`);
 
-        // Pobieramy link do audio (API Google Translate)
-        const url = googleTTS.getAudioUrl(textResponse, {
+        // Zamiast getAudioUrl (limit 200 znaków), używamy getAllAudioUrls
+        // Paczka sama potnie długi tekst na akceptowalne kawałki
+        const audioUrls = googleTTS.getAllAudioUrls(textResponse, {
             lang: 'pl',
             slow: false,
             host: 'https://translate.google.com',
         });
 
-        // Pobieramy plik
-        const response = await fetch(url);
-        const buffer = await response.arrayBuffer();
+        const buffers = [];
 
-        // Zapisujemy na dysku
+        // Przechodzimy przez każdy mały wygenerowany link i pobieramy audio
+        for (const item of audioUrls) {
+            const response = await fetch(item.url);
+            const arrayBuffer = await response.arrayBuffer();
+            buffers.push(Buffer.from(arrayBuffer)); // Zbieramy kawałki do tablicy
+        }
+
+        // Sklejamy wszystkie kawałki dźwięku w jeden kompletny plik
+        const finalBuffer = Buffer.concat(buffers);
+        
+        // NOWE: Automatyczne tworzenie folderu temp_audio
+        const tempDir = path.join(__dirname, 'temp_audio');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir);
+        }
+
         const fileName = `odpowiedz_${Date.now()}.mp3`;
-        const filePath = path.join(__dirname, fileName);
+        const filePath = path.join(tempDir, fileName); // Plik trafia do temp_audio
 
-        fs.writeFileSync(filePath, Buffer.from(buffer));
+        // Zapisujemy sklejony, pełny plik na dysku
+        fs.writeFileSync(filePath, finalBuffer);
         console.log(`✅ Zapisano plik audio z odpowiedzią: ${fileName}`);
         
         return filePath;
