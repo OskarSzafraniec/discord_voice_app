@@ -194,6 +194,42 @@ client.on(Events.MessageCreate, async message => {
             message.reply('❌ Przecież nie ma mnie na żadnym kanale!');
         }
     }
+        if (message.content === '!status') {
+            const ping = client.ws.ping; // Pobieramy opóźnienie Discorda
+            
+            // Obliczamy czas działania bota (uptime)
+            const uptime = Math.floor(process.uptime());
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            const seconds = uptime % 60;
+
+            const statusMessage = `
+**📊 Status Asystenta Głosowego**
+🟢 **Stan:** Aktywny i gotowy do pracy
+🏓 **Opóźnienie (Ping):** \`${ping}ms\`
+⏱️ **Czas działania:** \`${hours}h ${minutes}m ${seconds}s\`
+🧠 **Aktywny model AI:** \`Google Gemini 2.5 Flash\`
+            `;
+            
+            message.channel.send(statusMessage);
+        }
+
+        // --- NOWA KOMENDA: !pomoc ---
+        if (message.content === '!pomoc') {
+            const helpMessage = `
+**📖 Instrukcja Obsługi Asystenta**
+Oto lista dostępnych komend:
+
+> **!start** - Bot dołącza do Twojego kanału głosowego i zaczyna nasłuchiwać.
+> **!stop** - Bot przerywa pracę, czyści pliki i opuszcza kanał głosowy.
+> **!status** - Wyświetla techniczne informacje o bocie (ping, czas działania, model).
+> **!pomoc** - Wyświetla tę listę komend.
+
+*💡 Wskazówka: Po użyciu \`!start\`, upewnij się, że jesteś na kanale głosowym. Kiedy skończysz mówić do bota, po prostu zrób pauzę. Asystent sam wykryje koniec zdania!*
+            `;
+            
+            message.channel.send(helpMessage);
+        }
 });
 
 client.login(process.env.DISCORD_TOKEN);
