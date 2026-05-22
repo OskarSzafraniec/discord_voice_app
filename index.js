@@ -11,6 +11,50 @@ const { convertTextToAudioLocal } = require('./TextToSpeech');
 const { createAudioResource, createAudioPlayer, AudioPlayerStatus } = require('@discordjs/voice');
 const path = require('path');
 
+// 🧹 SYSTEM CZYSZCZENIA PLIKÓW (TTL - Time To Live)
+
+function cleanupOldAudioFiles() {
+    const tempDir = path.join(__dirname, 'temp_audio');
+    const TTL_MINUTES = 10; // Maksymalny czas życia pliku (w minutach)
+    const TTL_MS = TTL_MINUTES * 60 * 1000;
+    const now = Date.now();
+
+    // Sprawdzamy, czy folder w ogóle istnieje
+    if (fs.existsSync(tempDir)) {
+        fs.readdir(tempDir, (err, files) => {
+            if (err) {
+                console.error('⚠️ [TTL] Błąd odczytu folderu temp_audio:', err);
+                return;
+            }
+
+            files.forEach(file => {
+                const filePath = path.join(tempDir, file);
+                
+                // Pobieramy statystyki pliku (kiedy został stworzony/zmodyfikowany)
+                fs.stat(filePath, (err, stats) => {
+                    if (err) return;
+
+                    const fileAge = now - stats.mtimeMs; // Wiek pliku w milisekundach
+                    
+                    // Jeśli plik jest starszy niż nasze TTL, usuwamy go
+                    if (fileAge > TTL_MS) {
+                        fs.unlink(filePath, err => {
+                            if (!err) {
+                                console.log(`🧹 [TTL] Usunięto przestarzały plik: ${file}`);
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    }
+}
+
+// Uruchamiamy nasz "odkurzacz" cyklicznie co 5 minut
+setInterval(cleanupOldAudioFiles, 5 * 60 * 1000);
+// Dodatkowo uruchamiamy go raz od razu przy starcie bota, żeby posprzątał po poprzedniej sesji
+cleanupOldAudioFiles();
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -19,6 +63,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
+
+let isBotBusy = false; // Zmienna pilnująca, czy bot jest w trakcie przetwarzania
 
 let connection = null;
 const currentlyRecording = new Set(); 
@@ -52,6 +98,9 @@ client.on(Events.MessageCreate, async message => {
                 const receiver = connection.receiver;
 
                 receiver.speaking.on('start', (userId) => {
+                    // --- 1. BLOKADA: Ignorujemy dźwięk, jeśli bot myśli lub mówi ---
+                    if (isBotBusy) return;
+
                     if (currentlyRecording.has(userId)) return;
                     currentlyRecording.add(userId);
                     
@@ -101,6 +150,8 @@ client.on(Events.MessageCreate, async message => {
                             }
                         }
 
+                        // --- 2. ZABLOKOWANIE: Bot ma poprawne nagranie i zaczyna proces ---
+                        isBotBusy = true;
 
                         console.log(`⏳ Zakończono mówienie. Konwertuję na plik: ${wavFilename}`);
                         
@@ -148,6 +199,8 @@ client.on(Events.MessageCreate, async message => {
                                             if (fs.existsSync(audioFilePath)) {
                                                 fs.unlinkSync(audioFilePath);
                                             }
+                                            // --- 3. ODBLOKOWANIE (SUKCES): Bot skończył odpowiadać ---
+                                            isBotBusy = false;
                                         });
                                     }
                                     
@@ -167,12 +220,16 @@ client.on(Events.MessageCreate, async message => {
                                             if (fs.existsSync(errorAudioPath)) {
                                                 fs.unlinkSync(errorAudioPath);
                                             }
+                                            // --- 4. ODBLOKOWANIE (BŁĄD AI): Bot odczytał ostrzeżenie ---
+                                            isBotBusy = false;
                                         });
                                     }
                                 }
 
                             } else {
                                 console.error('⚠️ Błąd konwersji ffmpeg.');
+                                // --- 5. ODBLOKOWANIE AWARYJNE: Błąd FFmpeg ---
+                                isBotBusy = false;
                             }
                         });
                     });
