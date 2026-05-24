@@ -11,6 +11,14 @@ const { convertTextToAudioLocal } = require('./TextToSpeech');
 const { createAudioResource, createAudioPlayer, AudioPlayerStatus } = require('@discordjs/voice');
 const path = require('path');
 
+const { Pool } = require('pg');
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Wymagane przez Neon do bezpiecznego połączenia SSL
+    }
+});
+
 // 🧹 SYSTEM CZYSZCZENIA PLIKÓW (TTL - Time To Live)
 
 function cleanupOldAudioFiles() {
@@ -66,6 +74,8 @@ const client = new Client({
 
 let isBotBusy = false; // Zmienna pilnująca, czy bot jest w trakcie przetwarzania
 
+let silenceTimeout = null; // Zmienna przechowująca timer bezczynności
+
 let connection = null;
 const currentlyRecording = new Set(); 
 
@@ -95,11 +105,13 @@ client.on(Events.MessageCreate, async message => {
             message.reply(`🎙️ Połączono z **${voiceChannel.name}**! Możesz mówić.`);
 
             connection.on(VoiceConnectionStatus.Ready, () => {
+                startSilenceTimer(connection);
                 const receiver = connection.receiver;
 
                 receiver.speaking.on('start', (userId) => {
                     // --- 1. BLOKADA: Ignorujemy dźwięk, jeśli bot myśli lub mówi ---
                     if (isBotBusy) return;
+                    if (silenceTimeout) clearTimeout(silenceTimeout);
 
                     if (currentlyRecording.has(userId)) return;
                     currentlyRecording.add(userId);
@@ -184,6 +196,21 @@ client.on(Events.MessageCreate, async message => {
                                     // --- KOD LLM ---
                                     const aiReply = await generateAiResponse(text);
                                     
+                                    // 💾 AUTOMATYCZNY ZAPIS ROZMOWY DO BAZY NEON
+                                    try {
+                                        await pool.query(
+                                            `INSERT INTO historia_rozmow (user_id, username, tekst_uzytkownika, odpowiedz_bota) 
+                                            VALUES ($1, $2, $3, $4)`,
+                                            [message.author.id, message.author.username, text, aiReply]
+                                        );
+                                        console.log('💾 [BAZA NEON] Pomyślnie zapisano rozmowę do chmury!');
+                                    } catch (dbError) {
+                                        console.error('⚠️ [BAZA NEON] Błąd zapisu do bazy:', dbError);
+                                    }
+                                    // ======
+                                    // =============================================
+                                    
+
                                     // --- BRAKUJĄCY KOD TTS (ODTWARZANIE GŁOSU) ---
                                     const audioFilePath = await convertTextToAudioLocal(aiReply);
                                     
@@ -201,6 +228,7 @@ client.on(Events.MessageCreate, async message => {
                                             }
                                             // --- 3. ODBLOKOWANIE (SUKCES): Bot skończył odpowiadać ---
                                             isBotBusy = false;
+                                            startSilenceTimer(connection);
                                         });
                                     }
                                     
@@ -247,6 +275,7 @@ client.on(Events.MessageCreate, async message => {
             connection.destroy();
             connection = null;
             message.reply('👋 Zakończyłem nasłuchiwanie i opuściłem kanał.');
+            if (silenceTimeout) clearTimeout(silenceTimeout);
         } else {
             message.reply('❌ Przecież nie ma mnie na żadnym kanale!');
         }
@@ -288,5 +317,20 @@ Oto lista dostępnych komend:
             message.channel.send(helpMessage);
         }
 });
+
+
+function startSilenceTimer(connection) {
+    if (silenceTimeout) clearTimeout(silenceTimeout);
+
+    silenceTimeout = setTimeout(() => {
+        console.log('⏱️ [AUTOPUSZCZANIE] Wykryto ciszę powyżej 60 sekund. Bot opuszcza kanał.');
+        if (connection) {
+            connection.destroy();
+        }
+        isBotBusy = false;
+    }, 60000);
+}
+
+client.login(process.env.DISCORD_TOKEN);
 
 client.login(process.env.DISCORD_TOKEN);

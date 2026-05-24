@@ -5,8 +5,8 @@ Projekt polegający na stworzeniu bota do Discorda, który nasłuchuje mowy uży
 Bot przeszedł migrację technologiczną i obecnie działa w oparciu o środowisko **Node.js** w celu stabilniejszej obsługi połączeń głosowych. Wykorzystuje następujące technologie:
 * **Discord.js & @discordjs/voice** – solidna obsługa łączności z Discordem i przechwytywanie strumieni audio.
 * **Prism-media & FFmpeg** – dekodowanie w locie pakietów Opus i konwersja do formatu `.wav`.
-* (W planach) **LLM** – integracja z darmowym modelem sztucznej inteligencji za pomocą **Google Gemini API**.
-* (W planach) **Baza Danych** – zapisywanie logów zapytań w relacyjnej bazie danych PostgreSQL.
+* **LLM** – zintegrowano z darmowym modelem sztucznej inteligencji za pomocą **Google Gemini API**.
+* **Baza Danych** – zapisywanie logów do chmury bazy PostgreSQL na platformie Neon.tech.
 
 ## 📚 Dokumentacja i Plan Projektu
 
